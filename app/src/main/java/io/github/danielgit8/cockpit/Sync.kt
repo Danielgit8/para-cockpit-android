@@ -15,27 +15,37 @@ import java.util.concurrent.TimeUnit
 object Sync {
     private val net = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 
+    /** Gültige Anmeldung, bei Bedarf erneuert. Null, wenn nicht angemeldet. */
+    fun session(store: Store, force: Boolean = false): Api.Session? {
+        var s = store.session ?: return null
+        if (force || s.expiresAt - 120 < System.currentTimeMillis() / 1000) {
+            try { s = Api.refresh(s); store.session = s }
+            catch (e: Api.HttpError) {
+                if (e.code == 400 || e.code == 401) { store.session = null; store.lastError = "Anmeldung abgelaufen. Bitte neu anmelden." }
+                throw e
+            }
+        }
+        return s
+    }
+
     /** Holt den aktuellen Stand und zeigt ihn an. Läuft im Hintergrund-Thread. */
     fun run(ctx: Context) {
         val store = Store(ctx)
-        val saved = store.session
-        if (saved == null) { Notifier.show(ctx); return }
-        var s = saved
+        if (store.session == null) { Notifier.show(ctx); return }
         try {
-            if (s.expiresAt - 120 < System.currentTimeMillis() / 1000) { s = Api.refresh(s); store.session = s }
+            var s = session(store) ?: return
             val rows = try {
                 Api.items(s.access)
             } catch (e: Api.HttpError) {
                 if (e.code != 401) throw e
-                s = Api.refresh(s); store.session = s
+                s = session(store, force = true) ?: return
                 Api.items(s.access)
             }
             store.summary = Today.build(rows).toJson()
             store.lastSync = System.currentTimeMillis()
             store.lastError = ""
         } catch (e: Api.HttpError) {
-            if (e.code == 400 || e.code == 401) { store.session = null; store.lastError = "Anmeldung abgelaufen. Bitte neu anmelden." }
-            else store.lastError = e.message.orEmpty()
+            if (store.session != null) store.lastError = e.message.orEmpty()
             throw e
         } finally {
             Notifier.show(ctx)

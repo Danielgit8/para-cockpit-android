@@ -62,6 +62,34 @@ object Api {
         return session(call("POST", "/auth/v1/token?grant_type=refresh_token", body, null), old.email)
     }
 
+    /** Konto-ID aus dem Anmelde-Schlüssel (JWT, Feld "sub"). */
+    fun userId(token: String): String {
+        val part = token.split(".").getOrNull(1) ?: return ""
+        val json = String(android.util.Base64.decode(part, android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP), Charsets.UTF_8)
+        return JSONObject(json).optString("sub")
+    }
+
+    private fun enc(s: String) = java.net.URLEncoder.encode(s, "UTF-8")
+
+    /** Ein einzelner Eintrag, frisch vom Server. */
+    fun item(token: String, id: String): JSONObject? {
+        val arr = JSONArray(call("GET", "/rest/v1/items?select=data,deleted&id=eq.${enc(id)}", null, token))
+        if (arr.length() == 0) return null
+        val o = arr.getJSONObject(0)
+        if (o.optBoolean("deleted")) return null
+        return o.optJSONObject("data")
+    }
+
+    /** Speichert einen Eintrag genau wie das Cockpit (upsert mit updated_at). */
+    fun save(token: String, id: String, data: JSONObject, updated: Long) {
+        val row = JSONObject().put("user_id", userId(token)).put("id", id).put("data", data)
+            .put("updated_at", updated).put("deleted", false)
+        call(
+            "POST", "/rest/v1/items?on_conflict=user_id,id", JSONArray().put(row).toString(), token,
+            mapOf("Prefer" to "resolution=merge-duplicates,return=minimal")
+        )
+    }
+
     /** Alle nicht gelöschten Einträge, als (id, data). Die Einstellungen stehen unter der id "__settings". */
     fun items(token: String): List<Pair<String, JSONObject>> {
         val out = ArrayList<Pair<String, JSONObject>>()

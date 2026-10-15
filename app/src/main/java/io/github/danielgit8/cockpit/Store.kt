@@ -42,7 +42,12 @@ class Store(ctx: Context) {
         get() = p.getBoolean("enabled", true)
         set(v) { p.edit().putBoolean("enabled", v).commit() }
 
+    /** Welche Einzel-Benachrichtigungen gerade zu sehen sind, damit erledigte verschwinden. */
+    var shownIds: Set<Int>
+        get() = p.getString("shown", "").orEmpty().split(",").mapNotNull { it.toIntOrNull() }.toSet()
+        set(v) { p.edit().putString("shown", v.joinToString(",")).commit() }
+
     fun clear() {
-        p.edit().remove("access").remove("refresh").remove("exp").remove("summary").remove("lastSync").remove("lastError").commit()
+        p.edit().remove("access").remove("refresh").remove("exp").remove("summary").remove("lastSync").remove("lastError").remove("shown").commit()
     }
 }
