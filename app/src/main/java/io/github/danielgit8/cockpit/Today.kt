@@ -123,7 +123,7 @@ object Today {
             val pid = idOf(mp); val prel = rel(mp)
             open.filter { idOf(it) !in dueIds && (pid in rel(it) || idOf(it) in prel) }
                 .sortedWith(compareBy<JSONObject>({ it.optString("due").ifEmpty { "9999" } }, { ord(it) }))
-                .take(3)
+                .take(1) // nur der eine nächste Schritt, nicht die ganze Liste
                 .forEach { out.add(task(it, "next")) }
         }
 
